@@ -1,49 +1,87 @@
 #include <stdlib.h>
 #include <math.h>
 
-#include <renderer.h>
+#include "renderer.h"
 
 static const float PI = 3.14159265359f;
 
-static const char* VS_SRC =
+static const char* SPHERE_VS_SRC =
 "#version 330 core\n"
 "layout(location = 0) in vec3 aPos;\n"
 "uniform mat4 uViewProj;\n"
 "uniform vec3 uOffset;\n"
 "uniform float uScale;\n"
+"out vec3 vNormal;\n"
 "void main() {\n"
+"    vNormal = aPos;\n"
 "    vec3 worldPos = (aPos * uScale) + uOffset;\n"
 "    gl_Position = uViewProj * vec4(worldPos, 1.0);\n"
 "}\n";
 
-static const char* FS_SRC =
+static const char* SPHERE_FS_SRC =
 "#version 330 core\n"
+"in vec3 vNormal;\n"
 "out vec4 FragColor;\n"
+"uniform vec3 uColor;\n"
+"uniform vec3 uLightDir;\n"
 "void main() {\n"
-"    FragColor = vec4(1.0, 1.0, 1.0, 1.0);\n"
+"    vec3 N = normalize(vNormal);\n"
+"    vec3 L = normalize(uLightDir);\n"
+"    float diff = max(dot(N, L), 0.0);\n"
+"    float ambient = 0.25;\n"
+"    vec3 shaded = uColor * (ambient + diff * 0.75);\n"
+"    FragColor = vec4(shaded, 1.0);\n"
 "}\n";
 
-void renderer_init(renderer_t* r) {
-    // Compile shader
+// ---- Unlit shader (lines)
+static const char* LINE_VS_SRC =
+"#version 330 core\n"
+"layout(location = 0) in vec3 aPos;\n"
+"uniform mat4 uViewProj;\n"
+"void main() {\n"
+"    gl_Position = uViewProj * vec4(aPos, 1.0);\n"
+"}\n";
+
+static const char* LINE_FS_SRC =
+"#version 330 core\n"
+"out vec4 FragColor;\n"
+"uniform vec3 uColor;\n"
+"void main() {\n"
+"    FragColor = vec4(uColor, 1.0);\n"
+"}\n";
+
+static GLuint compile_program(const char* vs_src, const char* fs_src) {
     GLuint vs = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vs, 1, &VS_SRC, NULL);
+    glShaderSource(vs, 1, &vs_src, NULL);
     glCompileShader(vs);
 
     GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fs, 1, &FS_SRC, NULL);
+    glShaderSource(fs, 1, &fs_src, NULL);
     glCompileShader(fs);
 
-    r->shader_program = glCreateProgram();
-    glAttachShader(r->shader_program, vs);
-    glAttachShader(r->shader_program, fs);
-    glLinkProgram(r->shader_program);
+    GLuint program = glCreateProgram();
+    glAttachShader(program, vs);
+    glAttachShader(program, fs);
+    glLinkProgram(program);
 
     glDeleteShader(vs);
     glDeleteShader(fs);
+    return program;
+}
 
+void renderer_init(renderer_t* r) {
+    // Sphere (lit) shader
+    r->shader_program = compile_program(SPHERE_VS_SRC, SPHERE_FS_SRC);
     r->u_view_proj_loc = glGetUniformLocation(r->shader_program, "uViewProj");
     r->u_offset_loc = glGetUniformLocation(r->shader_program, "uOffset");
     r->u_scale_loc = glGetUniformLocation(r->shader_program, "uScale");
+    r->u_color_loc = glGetUniformLocation(r->shader_program, "uColor");
+    r->u_light_dir_loc = glGetUniformLocation(r->shader_program, "uLightDir");
+
+    // Line (unlit) shader
+    r->line_shader_program = compile_program(LINE_VS_SRC, LINE_FS_SRC);
+    r->u_line_view_proj_loc = glGetUniformLocation(r->line_shader_program, "uViewProj");
+    r->u_line_color_loc = glGetUniformLocation(r->line_shader_program, "uColor");
 
     // Build shader unit mesh
     const int rings = 12, sectors = 12;
@@ -114,13 +152,18 @@ void renderer_cleanup(renderer_t* r) {
     glDeleteBuffers(1, &r->line_vbo);
 
     glDeleteProgram(r->shader_program);
+    glDeleteProgram(r->line_shader_program);
 }
 
-void renderer_draw_sphere(renderer_t* r, vector3_t position, float radius, const float* view_proj) {
+void renderer_draw_sphere(renderer_t* r, vector3_t position, float radius,
+    uint8_t color_r, uint8_t color_g, uint8_t color_b,
+    const float* view_proj) {
     glUseProgram(r->shader_program);
     glUniformMatrix4fv(r->u_view_proj_loc, 1, GL_FALSE, view_proj);
     glUniform3f(r->u_offset_loc, position.x, position.y, position.z);
     glUniform1f(r->u_scale_loc, radius);
+    glUniform3f(r->u_color_loc, color_r / 255.0f, color_g / 255.0f, color_b / 255.0f);
+    glUniform3f(r->u_light_dir_loc, 0.4f, 1.0f, 0.3f); // pointing toward the light
 
     glBindVertexArray(r->sphere_vao);
     glDrawElements(GL_TRIANGLES, r->sphere_index_count, GL_UNSIGNED_INT, 0);
@@ -136,10 +179,9 @@ void renderer_draw_line(renderer_t* r, vector3_t start, vector3_t end, const flo
     glBindBuffer(GL_ARRAY_BUFFER, r->line_vbo);
     glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(line_data), line_data);
 
-    glUseProgram(r->shader_program);
-    glUniformMatrix4fv(r->u_view_proj_loc, 1, GL_FALSE, view_proj);
-    glUniform3f(r->u_offset_loc, 0.0f, 0.0f, 0.0f);
-    glUniform1f(r->u_scale_loc, 1.0f);
+    glUseProgram(r->line_shader_program);
+    glUniformMatrix4fv(r->u_line_view_proj_loc, 1, GL_FALSE, view_proj);
+    glUniform3f(r->u_line_color_loc, 0.85f, 0.85f, 0.85f);
 
     glBindVertexArray(r->line_vao);
     glDrawArrays(GL_LINES, 0, 2);

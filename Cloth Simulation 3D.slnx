@@ -3,5 +3,5 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="Cloth Simulation 3D/Cloth Simulation 3D.vcxproj" />
+  <Project Path="Cloth Simulation 3D/Cloth Simulation 3D.vcxproj" Id="44805e38-e449-4d56-ac1f-d639f9cd6c99" />
 </Solution>

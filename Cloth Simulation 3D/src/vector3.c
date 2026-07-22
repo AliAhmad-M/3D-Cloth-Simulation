@@ -1,5 +1,6 @@
-#include <vector3.h>
 #include <math.h>
+
+#include "vector3.h"
 
 static const float EPSILON = 0.000001f;
 

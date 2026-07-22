@@ -1,5 +1,6 @@
 #include <math.h>
-#include <camera.h>
+
+#include "camera.h"
 
 static void mat4_perspective(float* out, float fov_rad, float aspect, float near_val, float far_val) {
     float tan_half_fov = tanf(fov_rad / 2.0f);

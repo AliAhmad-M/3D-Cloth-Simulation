@@ -1,68 +1,42 @@
-#include "engine.h"
+#include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 
-bool engine_init(engine_t* engine, int width, int height, const char* title) {
-    if (!glfwInit()) {
-        fprintf(stderr, "Failed to initialize GLFW\n");
-        return false;
-    }
+#include "engine.h"
 
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
-    engine->window = glfwCreateWindow(width, height, title, NULL, NULL);
-    if (!engine->window) {
-        fprintf(stderr, "Failed to create GLFW window\n");
-        glfwTerminate();
-        return false;
-    }
-
-    glfwMakeContextCurrent(engine->window);
-
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-        fprintf(stderr, "Failed to initialize GLAD\n");
-        return false;
-    }
-
-    glEnable(GL_DEPTH_TEST);
-    renderer_init(&engine->renderer);
-
-    vector3_t eye = { 1.5f, 1.2f, 2.0f };
-    vector3_t target = { 0.0f, -0.3f, 0.0f };
-    vector3_t up = { 0.0f, 1.0f, 0.0f };
-    camera_init(&engine->camera, eye, target, up, (float)width / (float)height);
-
-    engine->is_running = true;
-    
-    float spacing = 0.08f;
+static void spawn_objects(engine_t* engine) {
+    float spacing = 0.12f;
     float start_x = -(GRID_WIDTH * spacing) * 0.5f;
     float start_z = -(GRID_HEIGHT * spacing) * 0.5f;
+    float start_y = 0.55f;
 
-    // Initialize particles
+    // Initialize cloth particles
     for (int z = 0; z < GRID_HEIGHT; ++z) {
         for (int x = 0; x < GRID_WIDTH; ++x) {
             int idx = z * GRID_WIDTH + x;
             particle_create(&engine->particles[idx]);
 
             engine->particles[idx].curr_position = (vector3_t){
-                start_x + x * spacing, 0.0f, start_z + z * spacing
+                start_x + x * spacing, start_y, start_z + z * spacing
             };
             engine->particles[idx].prev_position = engine->particles[idx].curr_position;
-            engine->particles[idx].radius = 0.012f;
-
-            bool is_corner = (x == 0 && z == 0) ||
-                (x == GRID_WIDTH - 1 && z == 0) ||
-                (x == 0 && z == GRID_HEIGHT - 1) ||
-                (x == GRID_WIDTH - 1 && z == GRID_HEIGHT - 1);
-
-            if (is_corner) {
-                engine->particles[idx].is_fixed = true;
-            }
+            engine->particles[idx].radius = 0.006f;
+            engine->particles[idx].is_fixed = false;
         }
     }
 
-    // Initialize constraints
+    // Add a fixed sphere
+    int sphere_idx = GRID_WIDTH * GRID_HEIGHT;
+    particle_create(&engine->particles[sphere_idx]);
+    engine->particles[sphere_idx].curr_position = (vector3_t){ 0.0f, -0.3f, 0.0f };
+    engine->particles[sphere_idx].prev_position = engine->particles[sphere_idx].curr_position;
+    engine->particles[sphere_idx].radius = 0.25f;
+    engine->particles[sphere_idx].is_fixed = true;
+    engine->particles[sphere_idx].color_r = 0;
+    engine->particles[sphere_idx].color_g = 189;
+    engine->particles[sphere_idx].color_b = 255;
+
+    // Initialize cloth constraints
     int constraint_count = 0;
     for (int z = 0; z < GRID_HEIGHT; ++z) {
         for (int x = 0; x < GRID_WIDTH; ++x) {
@@ -80,13 +54,58 @@ bool engine_init(engine_t* engine, int width, int height, const char* title) {
             }
         }
     }
+}
+
+bool engine_init(engine_t* engine, int width, int height, const char* title) {
+    // Initialize GLFW
+    if (!glfwInit()) {
+        fprintf(stderr, "Failed to initialize GLFW\n");
+        return false;
+    }
+
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+    // Create window
+    engine->window = glfwCreateWindow(width, height, title, NULL, NULL);
+    if (!engine->window) {
+        fprintf(stderr, "Failed to create GLFW window\n");
+        glfwTerminate();
+        return false;
+    }
+
+    glfwMakeContextCurrent(engine->window);
+
+    // Initialize GLAD
+    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
+        fprintf(stderr, "Failed to initialize GLAD\n");
+        return false;
+    }
+
+    // Initialize renderer
+    glEnable(GL_DEPTH_TEST);
+    renderer_init(&engine->renderer);
+
+    vector3_t eye = { 1.5f, 1.2f, 2.0f };
+    vector3_t target = { 0.0f, -0.3f, 0.0f };
+    vector3_t up = { 0.0f, 1.0f, 0.0f };
+    camera_init(&engine->camera, eye, target, up, (float)width / (float)height);
+
+    engine->is_running = true;
+
+    // Allocate memory for particle and constraints
+    engine->particles   = (particle_t*)malloc(sizeof(particle_t) * NUM_PARTICLES);
+    engine->constraints = (constraint_t*)malloc(sizeof(constraint_t) * NUM_CONSTRAINTS);
+
+    spawn_objects(engine);
 
     return true;
 }
 
 void engine_run(engine_t* engine) {
     const float dt = 1.0f / 60.0f;
-    const int constraint_iterations = 8;
+    const int substeps = 8;
     double previous_time = glfwGetTime();
     double accumulator = 0.0;
 
@@ -100,14 +119,45 @@ void engine_run(engine_t* engine) {
 
         // Physics update
         while (accumulator >= dt) {
+            // Apply gravity to all dynamic particles
             for (int i = 0; i < NUM_PARTICLES; ++i) {
-                particle_update(&engine->particles[i], dt);
+                if (!engine->particles[i].is_fixed) {
+                    particle_update(&engine->particles[i], dt);
+                }
             }
-            for (int iter = 0; iter < constraint_iterations; ++iter) {
+
+            // Interleave constraints and sphere collisions
+            particle_t* sphere = &engine->particles[GRID_WIDTH * GRID_HEIGHT];
+
+            for (int iter = 0; iter < substeps; ++iter) {
+                // Resolve cloth structural constraints
                 for (int i = 0; i < NUM_CONSTRAINTS; ++i) {
                     cloth_constraint_resolve(&engine->constraints[i]);
                 }
+
+                // Collide cloth particles against the static sphere
+                for (int i = 0; i < GRID_WIDTH * GRID_HEIGHT; ++i) {
+                    particle_t* p = &engine->particles[i];
+
+                    vector3_t delta = vector3_sub(p->curr_position, sphere->curr_position);
+                    float dist_sq = vector3_dot(delta, delta);
+                    float min_dist = p->radius + sphere->radius;
+
+                    if (dist_sq < min_dist * min_dist && dist_sq > 0.000001f) {
+                        float dist = sqrtf(dist_sq);
+                        float overlap = min_dist - dist;
+                        vector3_t normal = vector3_mul(delta, 1.0f / dist);
+
+                        // Push particles
+                        p->curr_position = vector3_add(p->curr_position, vector3_mul(normal, overlap));
+
+                        // Add a friction
+                        vector3_t vel = vector3_sub(p->curr_position, p->prev_position);
+                        p->prev_position = vector3_add(p->prev_position, vector3_mul(vel, 0.1f));
+                    }
+                }
             }
+
             accumulator -= dt;
         }
 
@@ -133,6 +183,9 @@ void engine_run(engine_t* engine) {
                 &engine->renderer,
                 engine->particles[i].curr_position,
                 engine->particles[i].radius,
+                engine->particles[i].color_r,
+                engine->particles[i].color_g,
+                engine->particles[i].color_b,
                 engine->camera.view_proj_matrix
             );
         }
