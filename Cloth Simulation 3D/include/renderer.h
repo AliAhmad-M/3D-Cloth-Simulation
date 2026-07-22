@@ -44,7 +44,9 @@ void renderer_draw_line(
 );
 
 void renderer_draw_quad(
-    renderer_t* r, vector3_t p0, vector3_t p1, vector3_t p2, vector3_t p3,
+    renderer_t* r,
+    vector3_t p0, vector3_t p1, vector3_t p2, vector3_t p3,
+    vector3_t n0, vector3_t n1, vector3_t n2, vector3_t n3,
     uint8_t color_r, uint8_t color_g, uint8_t color_b,
     const float* view_proj
 );

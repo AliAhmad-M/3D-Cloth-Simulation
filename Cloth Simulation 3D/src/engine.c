@@ -94,12 +94,42 @@ static void spawn_objects(engine_t* engine) {
                     &engine->particles[idx], &engine->particles[idx + GRID_WIDTH]
                 );
             }
+
+            // Shear constraints (diagonals)
+            if (x < GRID_WIDTH - 1 && z < GRID_HEIGHT - 1) {
+                engine->constraints[constraint_count++] = cloth_constraint_add(
+                    &engine->particles[idx], &engine->particles[idx + GRID_WIDTH + 1]
+                );
+                engine->constraints[constraint_count++] = cloth_constraint_add(
+                    &engine->particles[idx + 1], &engine->particles[idx + GRID_WIDTH]
+                );
+            }
         }
     }
 }
 
+static vector3_t compute_particle_normal(engine_t* engine, int x, int z) {
+    int xm = x > 0 ? x - 1 : x;
+    int xp = x < GRID_WIDTH - 1 ? x + 1 : x;
+    int zm = z > 0 ? z - 1 : z;
+    int zp = z < GRID_HEIGHT - 1 ? z + 1 : z;
+
+    vector3_t left = engine->particles[z * GRID_WIDTH + xm].curr_position;
+    vector3_t right = engine->particles[z * GRID_WIDTH + xp].curr_position;
+    vector3_t up = engine->particles[zm * GRID_WIDTH + x].curr_position;
+    vector3_t down = engine->particles[zp * GRID_WIDTH + x].curr_position;
+
+    vector3_t dx = vector3_sub(right, left);
+    vector3_t dz = vector3_sub(down, up);
+    vector3_t n = vector3_cross(dz, dx);
+
+    float len_sq = vector3_dot(n, n);
+    if (len_sq > 0.00001f) return vector3_mul(n, 1.0f / sqrtf(len_sq));
+    return (vector3_t) { 0.0f, 1.0f, 0.0f };
+}
+
 static void reset_cloth_position(engine_t* engine) {
-    float spacing = 0.08f;
+    float spacing = 0.07f;
     float start_x = -(GRID_WIDTH * spacing) * 0.5f;
     float start_z = -(GRID_HEIGHT * spacing) * 0.5f;
     float start_y = 0.55f;
@@ -352,7 +382,14 @@ void engine_run(engine_t* engine) {
                     vector3_t p1 = engine->particles[z * GRID_WIDTH + x + 1].curr_position;
                     vector3_t p2 = engine->particles[(z + 1) * GRID_WIDTH + x + 1].curr_position;
                     vector3_t p3 = engine->particles[(z + 1) * GRID_WIDTH + x].curr_position;
-                    renderer_draw_quad(engine->renderer, p0, p1, p2, p3, 230, 230, 235, engine->camera->view_proj_matrix);
+
+                    vector3_t n0 = compute_particle_normal(engine, x, z);
+                    vector3_t n1 = compute_particle_normal(engine, x + 1, z);
+                    vector3_t n2 = compute_particle_normal(engine, x + 1, z + 1);
+                    vector3_t n3 = compute_particle_normal(engine, x, z + 1);
+
+                    renderer_draw_quad(engine->renderer, p0, p1, p2, p3, n0, n1, n2, n3,
+                        230, 230, 235, engine->camera->view_proj_matrix);
                 }
             }
         }

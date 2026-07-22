@@ -237,19 +237,14 @@ void renderer_draw_line(renderer_t* r, vector3_t start, vector3_t end, const flo
 }
 
 void renderer_draw_quad(
-    renderer_t* r, vector3_t p0, vector3_t p1, vector3_t p2, vector3_t p3,
-    uint8_t color_r, uint8_t color_g, uint8_t color_b, 
+    renderer_t* r, 
+    vector3_t p0, vector3_t p1, vector3_t p2, vector3_t p3,
+    vector3_t n0, vector3_t n1, vector3_t n2, vector3_t n3,
+    uint8_t color_r, uint8_t color_g, uint8_t color_b,
     const float* view_proj) {
-    vector3_t edge_a = vector3_sub(p1, p0);
-    vector3_t edge_b = vector3_sub(p3, p0);
-    vector3_t normal = vector3_cross(edge_a, edge_b);
 
-    float len_sq = vector3_dot(normal, normal);
-    if (len_sq > 0.00001f) normal = vector3_mul(normal, 1.0f / sqrtf(len_sq));
-    else normal = (vector3_t){ 0.0f, 1.0f, 0.0f };
-
-    // Two triangles: p0-p1-p2 and p0-p2-p3
     vector3_t verts[6] = { p0, p1, p2, p0, p2, p3 };
+    vector3_t normals[6] = { n0, n1, n2, n0, n2, n3 };
 
     float data[36];
     int idx = 0;
@@ -257,9 +252,9 @@ void renderer_draw_quad(
         data[idx++] = verts[i].x;
         data[idx++] = verts[i].y;
         data[idx++] = verts[i].z;
-        data[idx++] = normal.x;
-        data[idx++] = normal.y;
-        data[idx++] = normal.z;
+        data[idx++] = normals[i].x;
+        data[idx++] = normals[i].y;
+        data[idx++] = normals[i].z;
     }
 
     glBindBuffer(GL_ARRAY_BUFFER, r->quad_vbo);

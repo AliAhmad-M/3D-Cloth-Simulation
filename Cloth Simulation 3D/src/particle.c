@@ -6,7 +6,7 @@
 #include "particle.h"
 #include "vector3.h"
 
-static const vector3_t GRAVITY = { 0.0f, -9.81f / 3.5f, 0.0f };
+static const vector3_t GRAVITY = { 0.0f, -9.81f / 5.0f, 0.0f };
 static const float PI = 3.14159265359f;
 static const float DAMPING = 0.995f;
 
