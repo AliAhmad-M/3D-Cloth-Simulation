@@ -116,7 +116,7 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp23</LanguageStandard>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
-      <AdditionalIncludeDirectories>$(SolutionDir)\Cloth Simulation 3D\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)\Cloth Simulation 3D\include;$(SolutionDir)\Cloth Simulation 3D\external;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -145,21 +145,28 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="external\microui.c" />
     <ClCompile Include="main.c" />
     <ClCompile Include="src\camera.c" />
     <ClCompile Include="src\constraint.c" />
     <ClCompile Include="src\engine.c" />
     <ClCompile Include="src\particle.c" />
     <ClCompile Include="src\renderer.c" />
+    <ClCompile Include="src\ui.c" />
     <ClCompile Include="src\vector3.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="external\microui.h" />
     <ClInclude Include="include\camera.h" />
     <ClInclude Include="include\constraint.h" />
     <ClInclude Include="include\engine.h" />
     <ClInclude Include="include\particle.h" />
     <ClInclude Include="include\renderer.h" />
+    <ClInclude Include="include\ui.h" />
     <ClInclude Include="include\vector3.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="external\atlas.inl" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
